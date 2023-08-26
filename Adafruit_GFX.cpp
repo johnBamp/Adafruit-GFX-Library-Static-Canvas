@@ -2382,10 +2382,8 @@ void GFXcanvas8::drawFastRawHLine(int16_t x, int16_t y, int16_t w,
 */
 /**************************************************************************/
 GFXcanvas16::GFXcanvas16(uint16_t w, uint16_t h) : Adafruit_GFX(w, h) {
-  uint32_t bytes = w * h * 2;
-  if ((buffer = (uint16_t *)malloc(bytes))) {
-    memset(buffer, 0, bytes);
-  }
+    buffer = gfxBuffer;
+    memset(buffer, 0, w * h * 2);
 }
 
 /**************************************************************************/
@@ -2394,8 +2392,7 @@ GFXcanvas16::GFXcanvas16(uint16_t w, uint16_t h) : Adafruit_GFX(w, h) {
 */
 /**************************************************************************/
 GFXcanvas16::~GFXcanvas16(void) {
-  if (buffer)
-    free(buffer);
+
 }
 
 /**************************************************************************/
