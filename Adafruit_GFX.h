@@ -385,7 +385,7 @@ protected:
   uint16_t getRawPixel(int16_t x, int16_t y) const;
   void drawFastRawVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
   void drawFastRawHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  uint16_t *buffer; ///< Raster data: no longer private, allow subclass access
+  static uint16_t gfxBuffer[320 * 240];
 };
 
 #endif // _ADAFRUIT_GFX_H
