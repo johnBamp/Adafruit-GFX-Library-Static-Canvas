@@ -1,391 +1,552 @@
-#ifndef _ADAFRUIT_GFX_H
-#define _ADAFRUIT_GFX_H
+#ifndef ARDUINOGUI_H
+#define ARDUINOGUI_H
 
-#if ARDUINO >= 100
-#include "Arduino.h"
-#include "Print.h"
-#else
-#include "WProgram.h"
+#include <Adafruit_GFX.h>
+#include <SPI.h>
+#include <Adafruit_ILI9341.h>
+#include <Wire.h>
+#include <Adafruit_FT6206.h>
+#include <Adafruit_ImageReader.h> // Image-reading functions
+#include <SdFat.h>
+#include <SPIFFS.h>
+
+#define TFT_CHIP_SLCT 32
+#define TFT_DATA_CMD 33
+
+#define baud_rate 9600
+
+class Grid {
+  private:
+    int rows;
+    int columns;
+
+    int width;  // width of the grid
+    int height; // height of the grid
+    
+    int gridX;  // x-coordinate of the grid
+    int gridY;  // y-coordinate of the grid
+    
+    Adafruit_ILI9341* tft;
+  
+
+  public:
+    Grid(int rows, int columns, Adafruit_ILI9341* tft, int width, int height, int x = 0, int y = 0) : rows(rows), columns(columns), tft(tft), width(width), height(height), gridX(x), gridY(y) {}
+
+    int getRows() {
+      return rows;
+    }
+
+    int getColumns() {
+      return columns;
+    }
+
+    int getWidth() {
+      return width;
+    }
+
+    int getHeight() {
+      return height;
+    }
+
+    int getX() {
+      return gridX;
+    }
+
+    int getY() {
+      return gridY;
+    }
+
+    void setRows(int r) {
+      rows = r;
+    }
+
+    void setColumns(int c) {
+      columns = c;
+    }
+
+    void setX(int x) {
+      gridX = x;
+    }
+
+    void setY(int y) {
+      gridY = y;
+    }
+
+
+};
+
+class Label {
+  protected:
+    String text;
+    int row;
+    int column;
+    int rowspan;
+    int colspan;
+    uint16_t backgroundColor;
+    uint16_t textColor;
+    uint8_t textSize;
+    bool centered;
+    Adafruit_ILI9341* tft;
+    Grid* grid;
+    int padx; 
+    int pady; 
+    int border;
+    uint16_t borderColor; 
+    int radius; 
+    bool hidden;
+    int topLine = 0;
+    const GFXfont* customFont;
+    String image = ""; // New member variable to store the image
+    void (*functionPtr)(GFXcanvas16*);
+    int x = -1; // Default to -1 to indicate they are not set
+    int y = -1;
+
+  public:
+    Label(String text, int row, int column, int rowspan, int colspan, uint16_t backgroundColor, uint16_t textColor, uint8_t textSize, bool centered, Adafruit_ILI9341* tft, Grid* grid, int padx, int pady, int border, uint16_t borderColor, int radius, const GFXfont* font = NULL, void (*functionPtr)(GFXcanvas16*) = nullptr)
+        : text(text), row(row), column(column), rowspan(rowspan), colspan(colspan), backgroundColor(backgroundColor), textColor(textColor), textSize(textSize), centered(centered), tft(tft), grid(grid), padx(padx), pady(pady), border(border), borderColor(borderColor), radius(radius), customFont(font), functionPtr(functionPtr) {}
+
+    void draw() {
+        hidden = false;
+
+        int drawX = x != -1 ? x : (grid->getX() + (grid->getWidth() / grid->getColumns()) * column);
+        int drawY = y != -1 ? y : (grid->getY() + (grid->getHeight() / grid->getRows()) * row);
+        int w = (grid->getWidth() / grid->getColumns()) * colspan;
+        int h = (grid->getHeight() / grid->getRows()) * rowspan;
+
+        int32_t width, height;
+
+        int16_t x1, y1;
+        uint16_t w1, h1;
+
+        GFXcanvas16 canvas(w, h);
+        
+        if (customFont) {
+          canvas.setFont(customFont);
+        } else {
+          canvas.setFont(NULL);
+        }
+
+        canvas.setTextSize(textSize);
+        canvas.getTextBounds(text, 0, 0, &x1, &y1, &w1, &h1);
+
+        int canvasX = padx + border;
+        int canvasY = pady + border;
+        int canvasW = w - 2 * (padx + border);
+        int canvasH = h - 2 * (pady + border);
+
+        if (centered) {
+          canvasX += (canvasW - w1) / 2;
+          canvasY += (canvasH - h1) / 2 - y1;
+        } else {
+          canvasY = 24;
+        }
+
+        canvas.fillRoundRect(0, 0, w, h, radius, borderColor);
+        canvas.fillRoundRect(border, border, w - 2 * border, h - 2 * border, radius, backgroundColor);
+
+        if (functionPtr != nullptr) {
+          (*functionPtr)(&canvas); // If canvas is the GFXcanvas16* you want to pass to the function
+        }
+
+        canvas.setTextColor(textColor);
+        canvas.setCursor(canvasX, canvasY);
+        canvas.print(text);
+
+        tft->drawRGBBitmap(drawX, drawY, canvas.getBuffer(), w, h);    
+    }
+
+    void hide() {
+      int drawX = x != -1 ? x : (tft->width() / grid->getColumns()) * column;
+      int drawY = y != -1 ? y : (tft->height() / grid->getRows()) * row;
+      int w = (tft->width() / grid->getColumns()) * colspan;
+      int h = (tft->height() / grid->getRows()) * rowspan;
+
+      hidden = true;
+
+      
+
+      // Draw over the area with the background color
+      tft->fillRoundRect(drawX, drawY, w, h, radius, ILI9341_BLACK);
+    }
+
+    void setTopLine(int line) {
+      topLine = line;
+    }
+
+    int getTopLine() {
+      return topLine;
+    }
+
+    void setText(String t) {
+      text = t;
+      draw();
+    }
+
+    String getText() {
+      return text;
+    }
+
+    void setRow(int r) {
+      row = r;
+    }
+
+    int getRow() {
+      return row;
+    }
+
+    void setColumn(int c) {
+      column = c;
+    }
+
+    int getColumn() {
+      return column;
+    }
+
+    void setRowspan(int rs) {
+      rowspan = rs;
+    }
+
+    int getRowspan() {
+      return rowspan;
+    }
+
+    void setColspan(int cs) {
+      colspan = cs;
+    }
+
+    int getColspan() {
+      return colspan;
+    }
+
+    void setBackgroundColor(uint16_t color) {
+      backgroundColor = color;
+    }
+
+    uint16_t getBackgroundColor() {
+      return backgroundColor;
+    }
+
+    bool isHidden() {
+      return hidden;
+    }
+
+    void setPos(int xPos, int yPos) {
+      x = xPos;
+      y = yPos;
+    }
+
+    int getX() {
+        return x;
+    }
+
+    int getY() {
+        return y;
+    }
+
+    int getHeight() {
+      // Compute the height based on grid values if y is not set
+      if(y == -1) {
+        return (grid->getHeight() / grid->getRows()) * rowspan; // Adjusted to use grid height
+      }
+      return y; // If y is set, it denotes a custom height
+    }
+        
+    int getWidth() {
+      // Compute the width based on grid values if x is not set
+      if(x == -1) {
+        return (grid->getWidth() / grid->getColumns()) * colspan; // Adjusted to use grid width
+      }
+      return x; // If x is set, it denotes a custom width
+    }
+
+
+    void move(int dx, int dy) {
+        x += dx;
+        y += dy;
+    }
+
+};
+
+class ScrollableLabel : public Label {
+  private:
+    Adafruit_FT6206* cts;
+
+  public:
+    ScrollableLabel(String text, int row, int column, int rowspan, int colspan, uint16_t backgroundColor, uint16_t textColor, uint8_t textSize, bool centered, Adafruit_ILI9341* tft, Grid* grid, int padx, int pady, int border, uint16_t borderColor, int radius, Adafruit_FT6206* cts, int topLine)
+      : Label(text, row, column, rowspan, colspan, backgroundColor, textColor, textSize, centered, tft, grid, padx, pady, border, borderColor, radius), cts(cts) {}
+
+    void checkTouch() {
+      if (cts->touched()) {
+        TS_Point touchPoint = cts->getPoint();
+        int x = (tft->width() / grid->getColumns()) * column;
+        int y = (tft->height() / grid->getRows()) * row;
+        int w = (tft->width() / grid->getColumns()) * colspan;
+        int h = (tft->height() / grid->getRows()) * rowspan;
+
+        int swap = touchPoint.x;
+        touchPoint.x = touchPoint.y;
+        touchPoint.y = swap;
+
+        touchPoint.y = map(touchPoint.y, 240, 0, 0, 240);
+
+        if (touchPoint.x >= x && touchPoint.x <= x + w && touchPoint.y >= y && touchPoint.y <= y + h) {
+          // Estimate max characters per line
+          int maxCharsPerLine = w / (6 * textSize);
+
+          // Calculate the maximum lines that can fit in the box
+          int maxLines = h / (8 * textSize);
+
+          // Count lines in text
+          int lineCount = 0;
+          for (int i = 0; i < text.length(); i++) {
+            char c = text[i];
+            if (c == ' ' || c == '\n') {
+              lineCount++;
+            }
+          }
+
+          if (touchPoint.y > (y + h / 2)) {
+            topLine++;
+            draw();
+          }
+          if (touchPoint.y < (y + h / 2) && topLine != 0) {
+            topLine--;
+            draw();
+          }
+        }
+      }
+    }
+};
+
+class Button : public Label {
+  private:
+    void (*onClick)();
+    Adafruit_FT6206* cts;
+    uint16_t activeColor;
+    uint16_t inactiveColor;
+    int radius;
+
+  public:
+    bool wasPressed = false;
+    bool isPressed;
+    bool buttonJustPressed = false;
+
+
+    static void placeholder() {
+
+    }
+
+    Button(String text, int row, int column, int rowspan, int colspan, uint16_t backgroundColor, uint16_t textColor, uint8_t textSize, bool centered, Adafruit_ILI9341* tft, Grid* grid, int padx, int pady, int border, uint16_t borderColor, int radius, void (*onClick)(), Adafruit_FT6206* cts, uint16_t activeColor)
+      : Label(text, row, column, rowspan, colspan, backgroundColor, textColor, textSize, centered, tft, grid, padx, pady, border, borderColor, radius),
+        onClick(onClick), cts(cts), activeColor(activeColor), inactiveColor(backgroundColor), isPressed(false), radius(radius) {}
+
+
+    void checkTouch() {
+      if (cts->touched()) {
+        TS_Point touchPoint = cts->getPoint();
+        int x = (tft->width() / grid->getColumns()) * column;
+        int y = (tft->height() / grid->getRows()) * row;
+        int w = (tft->width() / grid->getColumns()) * colspan;
+        int h = (tft->height() / grid->getRows()) * rowspan;
+
+        int swap = touchPoint.x;
+        touchPoint.x = touchPoint.y;
+        touchPoint.y = swap;
+
+        touchPoint.y = map(touchPoint.y, 240, 0, 0, 240);
+
+        if (touchPoint.x >= x && touchPoint.x <= x + w && touchPoint.y >= y && touchPoint.y <= y + h) {
+          if (!isPressed && !buttonJustPressed && !wasPressed) {
+            setBackgroundColor(activeColor);
+            draw();
+            //onClick();
+            isPressed = true;
+            buttonJustPressed = true;
+            wasPressed = true;
+          }
+        } else {
+          if (isPressed) {
+            setBackgroundColor(inactiveColor);
+            draw();
+          }
+          isPressed = false;
+          buttonJustPressed = false;
+          wasPressed = false;
+        }
+      } else {
+        if (isPressed) {
+          setBackgroundColor(inactiveColor);
+          draw();
+        }
+        isPressed = false;
+        buttonJustPressed = false;
+        wasPressed = false;
+      }
+    }
+
+
+
+};
+
+class Keyboard {
+    private:
+      Button* keys[5][10];
+      Button* modeKey;
+      Button* deleteKey;
+      Button* spaceKey;
+      Button* enterKey;
+      Adafruit_ILI9341* tft;
+      Grid* grid;
+      Adafruit_FT6206* cts;
+      bool mode;
+      int lineSkip;
+      bool upperCase = true;
+      String numericSpecial[5][10] = {{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
+        {"!", "@", "#", "$", "%", "^", "&", "*", "(", ")"},
+        {"_", "+", "{", "}", "|", "~", "<", ">", "?", ":"},
+        {"MODE", " ", "DEL", "ENT"}
+      };
+
+      String qwerty[5][10] = {{"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"},
+        {"A", "S", "D", "F", "G", "H", "J", "K", "L", "-"},
+        {"Z", "X", "C", "V", "B", "N", "M", ",", ".", "/"},
+        {"MODE", " ", "DEL", "ENT"}
+      };
+
+    public:
+      static void placeholder() {
+
+      }
+
+      Keyboard(int skip, Adafruit_ILI9341* tft, Grid* grid, Adafruit_FT6206* cts)
+        : lineSkip(skip), tft(tft), grid(grid), cts(cts) {
+
+        input = "";
+        // Initialize QWERTY keys
+        for (int i = 0; i < 3; i++) {
+          for (int j = 0; j < 10; j++) {
+            keys[i][j] = new Button(qwerty[i][j], i + 1 + lineSkip, j, 1, 1, ILI9341_WHITE, ILI9341_BLACK, 2, true, tft, grid, 2, 2, 1, ILI9341_BLACK, 5, &placeholder, cts, ILI9341_BLUE);
+          }
+        }
+
+        // Initialize bottom row keys
+        modeKey = new Button("mode", 4 + lineSkip, 0, 1, 2, ILI9341_WHITE, ILI9341_BLACK, 2, true, tft, grid, 2, 2, 1, ILI9341_BLACK, 5, &placeholder, cts, ILI9341_BLUE);
+        spaceKey = new Button(" ", 4 + lineSkip, 2, 1, 4, ILI9341_WHITE, ILI9341_BLACK, 2, true, tft, grid, 2, 2, 1, ILI9341_BLACK, 5, &placeholder, cts, ILI9341_BLUE);
+        deleteKey = new Button("Del", 4 + lineSkip, 6, 1, 2, ILI9341_WHITE, ILI9341_BLACK, 2, true, tft, grid, 2, 2, 1, ILI9341_BLACK, 5, &placeholder, cts, ILI9341_BLUE);
+        enterKey = new Button("Enter", 4 + lineSkip, 8, 1, 2, ILI9341_WHITE, ILI9341_BLACK, 2, true, tft, grid, 2, 2, 1, ILI9341_BLACK, 5, &placeholder, cts, ILI9341_BLUE);
+      }
+
+      String input; // Store user input
+
+      void toggleMode() {
+        // Toggle mode between alphanumeric and numeric/special
+        mode = !mode;
+
+        // Update buttons
+        for (int i = 0; i < 3; i++) {
+          for (int j = 0; j < 10; j++) {
+            keys[i][j]->setText(mode ? numericSpecial[i][j] : qwerty[i][j]);
+            keys[i][j]->draw(); // Update the displayed button
+          }
+        }
+        // Redraw the mode button to reflect the current mode
+        modeKey->setText(mode ? "ALPHA" : "MODE");
+        modeKey->draw();
+      }
+
+
+      void draw() {
+        // Draw QWERTY keys
+        for (int i = 0; i < 3; i++) {
+          for (int j = 0; j < 10; j++) {
+            keys[i][j]->draw();
+          }
+        }
+
+        // Draw bottom row keys
+        modeKey->draw();
+        spaceKey->draw();
+        deleteKey->draw();
+        enterKey->draw();
+      }
+
+      bool wasPressed[3][10] = {false};
+      bool wasModeKeyPressed = false;
+      bool wasSpaceKeyPressed = false;
+      bool wasDeleteKeyPressed = false;
+      bool wasEnterKeyPressed = false;
+
+      void readKeys() {
+        for (int i = 0; i < 3; i++) {
+          for (int j = 0; j < 10; j++) {
+            keys[i][j]->checkTouch();
+
+            if (keys[i][j]->getText() == "/" && keys[i][j]->isPressed && !wasPressed[i][j]) {
+              upperCase = !upperCase;
+              // Redraw the keyboard with the new case.
+              for (int m = 0; m < 3; m++) {
+                for (int n = 0; n < 10; n++) {
+                  String keyText = qwerty[m][n];
+                  if (upperCase) {
+                    keyText.toUpperCase();
+                  } else {
+                    keyText.toLowerCase();
+                  }
+                  keys[m][n]->setText(keyText);
+                  keys[m][n]->draw(); // Update the displayed button
+                }
+              }
+            } else if (keys[i][j]->isPressed && !wasPressed[i][j]) {
+              String text = keys[i][j]->getText();
+              input += text;
+              Serial.println(input);
+              wasPressed[i][j] = true;
+            } else if (!keys[i][j]->isPressed) {
+              wasPressed[i][j] = false;
+            }
+          }
+        }
+
+        modeKey->checkTouch();
+        if (modeKey->isPressed && !wasModeKeyPressed) {
+          toggleMode();
+          wasModeKeyPressed = true;
+        } else if (!modeKey->isPressed) {
+          wasModeKeyPressed = false;
+        }
+
+        spaceKey->checkTouch();
+        if (spaceKey->isPressed && !wasSpaceKeyPressed) {
+          input += " ";
+          wasSpaceKeyPressed = true;
+        } else if (!spaceKey->isPressed) {
+          wasSpaceKeyPressed = false;
+        }
+
+        deleteKey->checkTouch();
+        if (deleteKey->isPressed && !wasDeleteKeyPressed) {
+          if (input.length() > 0) {
+            input = input.substring(0, input.length() - 1);
+            Serial.println(input);
+            wasDeleteKeyPressed = true;
+          }
+        } else if (!deleteKey->isPressed) {
+          wasDeleteKeyPressed = false;
+        }
+      }
+
+      bool enterClicked(){
+        enterKey->checkTouch();
+        if (enterKey->isPressed && !wasEnterKeyPressed) {
+          wasEnterKeyPressed = true;
+          return true;
+        } else if (!enterKey->isPressed) {
+          wasEnterKeyPressed = false;
+          return false;
+        }
+      }
+};
+
+
+
 #endif
-#include "gfxfont.h"
-
-#include <Adafruit_I2CDevice.h>
-#include <Adafruit_SPIDevice.h>
-
-/// A generic graphics superclass that can handle all sorts of drawing. At a
-/// minimum you can subclass and provide drawPixel(). At a maximum you can do a
-/// ton of overriding to optimize. Used for any/all Adafruit displays!
-class Adafruit_GFX : public Print {
-
-public:
-  Adafruit_GFX(int16_t w, int16_t h); // Constructor
-
-  /**********************************************************************/
-  /*!
-    @brief  Draw to the screen/framebuffer/etc.
-    Must be overridden in subclass.
-    @param  x    X coordinate in pixels
-    @param  y    Y coordinate in pixels
-    @param color  16-bit pixel color.
-  */
-  /**********************************************************************/
-  virtual void drawPixel(int16_t x, int16_t y, uint16_t color) = 0;
-
-  // TRANSACTION API / CORE DRAW API
-  // These MAY be overridden by the subclass to provide device-specific
-  // optimized code.  Otherwise 'generic' versions are used.
-  virtual void startWrite(void);
-  virtual void writePixel(int16_t x, int16_t y, uint16_t color);
-  virtual void writeFillRect(int16_t x, int16_t y, int16_t w, int16_t h,
-                             uint16_t color);
-  virtual void writeFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  virtual void writeFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  virtual void writeLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                         uint16_t color);
-  virtual void endWrite(void);
-
-  // CONTROL API
-  // These MAY be overridden by the subclass to provide device-specific
-  // optimized code.  Otherwise 'generic' versions are used.
-  virtual void setRotation(uint8_t r);
-  virtual void invertDisplay(bool i);
-
-  // BASIC DRAW API
-  // These MAY be overridden by the subclass to provide device-specific
-  // optimized code.  Otherwise 'generic' versions are used.
-
-  // It's good to implement those, even if using transaction API
-  virtual void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  virtual void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  virtual void fillRect(int16_t x, int16_t y, int16_t w, int16_t h,
-                        uint16_t color);
-  virtual void fillScreen(uint16_t color);
-  // Optional and probably not necessary to change
-  virtual void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                        uint16_t color);
-  virtual void drawRect(int16_t x, int16_t y, int16_t w, int16_t h,
-                        uint16_t color);
-
-  // These exist only with Adafruit_GFX (no subclass overrides)
-  void drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
-  void drawCircleHelper(int16_t x0, int16_t y0, int16_t r, uint8_t cornername,
-                        uint16_t color);
-  void fillCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
-  void fillCircleHelper(int16_t x0, int16_t y0, int16_t r, uint8_t cornername,
-                        int16_t delta, uint16_t color);
-  void drawTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2,
-                    int16_t y2, uint16_t color);
-  void fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2,
-                    int16_t y2, uint16_t color);
-  void drawRoundRect(int16_t x0, int16_t y0, int16_t w, int16_t h,
-                     int16_t radius, uint16_t color);
-  void fillRoundRect(int16_t x0, int16_t y0, int16_t w, int16_t h,
-                     int16_t radius, uint16_t color);
-  void drawBitmap(int16_t x, int16_t y, const uint8_t bitmap[], int16_t w,
-                  int16_t h, uint16_t color);
-  void drawBitmap(int16_t x, int16_t y, const uint8_t bitmap[], int16_t w,
-                  int16_t h, uint16_t color, uint16_t bg);
-  void drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h,
-                  uint16_t color);
-  void drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h,
-                  uint16_t color, uint16_t bg);
-  void drawXBitmap(int16_t x, int16_t y, const uint8_t bitmap[], int16_t w,
-                   int16_t h, uint16_t color);
-  void drawGrayscaleBitmap(int16_t x, int16_t y, const uint8_t bitmap[],
-                           int16_t w, int16_t h);
-  void drawGrayscaleBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w,
-                           int16_t h);
-  void drawGrayscaleBitmap(int16_t x, int16_t y, const uint8_t bitmap[],
-                           const uint8_t mask[], int16_t w, int16_t h);
-  void drawGrayscaleBitmap(int16_t x, int16_t y, uint8_t *bitmap, uint8_t *mask,
-                           int16_t w, int16_t h);
-  void drawRGBBitmap(int16_t x, int16_t y, const uint16_t bitmap[], int16_t w,
-                     int16_t h);
-  void drawRGBBitmap(int16_t x, int16_t y, uint16_t *bitmap, int16_t w,
-                     int16_t h);
-  void drawRGBBitmap(int16_t x, int16_t y, const uint16_t bitmap[],
-                     const uint8_t mask[], int16_t w, int16_t h);
-  void drawRGBBitmap(int16_t x, int16_t y, uint16_t *bitmap, uint8_t *mask,
-                     int16_t w, int16_t h);
-  void drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
-                uint16_t bg, uint8_t size);
-  void drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
-                uint16_t bg, uint8_t size_x, uint8_t size_y);
-  void getTextBounds(const char *string, int16_t x, int16_t y, int16_t *x1,
-                     int16_t *y1, uint16_t *w, uint16_t *h);
-  void getTextBounds(const __FlashStringHelper *s, int16_t x, int16_t y,
-                     int16_t *x1, int16_t *y1, uint16_t *w, uint16_t *h);
-  void getTextBounds(const String &str, int16_t x, int16_t y, int16_t *x1,
-                     int16_t *y1, uint16_t *w, uint16_t *h);
-  void setTextSize(uint8_t s);
-  void setTextSize(uint8_t sx, uint8_t sy);
-  void setFont(const GFXfont *f = NULL);
-
-  /**********************************************************************/
-  /*!
-    @brief  Set text cursor location
-    @param  x    X coordinate in pixels
-    @param  y    Y coordinate in pixels
-  */
-  /**********************************************************************/
-  void setCursor(int16_t x, int16_t y) {
-    cursor_x = x;
-    cursor_y = y;
-  }
-
-  /**********************************************************************/
-  /*!
-    @brief   Set text font color with transparant background
-    @param   c   16-bit 5-6-5 Color to draw text with
-    @note    For 'transparent' background, background and foreground
-             are set to same color rather than using a separate flag.
-  */
-  /**********************************************************************/
-  void setTextColor(uint16_t c) { textcolor = textbgcolor = c; }
-
-  /**********************************************************************/
-  /*!
-    @brief   Set text font color with custom background color
-    @param   c   16-bit 5-6-5 Color to draw text with
-    @param   bg  16-bit 5-6-5 Color to draw background/fill with
-  */
-  /**********************************************************************/
-  void setTextColor(uint16_t c, uint16_t bg) {
-    textcolor = c;
-    textbgcolor = bg;
-  }
-
-  /**********************************************************************/
-  /*!
-  @brief  Set whether text that is too long for the screen width should
-          automatically wrap around to the next line (else clip right).
-  @param  w  true for wrapping, false for clipping
-  */
-  /**********************************************************************/
-  void setTextWrap(bool w) { wrap = w; }
-
-  /**********************************************************************/
-  /*!
-    @brief  Enable (or disable) Code Page 437-compatible charset.
-            There was an error in glcdfont.c for the longest time -- one
-            character (#176, the 'light shade' block) was missing -- this
-            threw off the index of every character that followed it.
-            But a TON of code has been written with the erroneous
-            character indices. By default, the library uses the original
-            'wrong' behavior and old sketches will still work. Pass
-            'true' to this function to use correct CP437 character values
-            in your code.
-    @param  x  true = enable (new behavior), false = disable (old behavior)
-  */
-  /**********************************************************************/
-  void cp437(bool x = true) { _cp437 = x; }
-
-  using Print::write;
-#if ARDUINO >= 100
-  virtual size_t write(uint8_t);
-#else
-  virtual void write(uint8_t);
-#endif
-
-  /************************************************************************/
-  /*!
-    @brief      Get width of the display, accounting for current rotation
-    @returns    Width in pixels
-  */
-  /************************************************************************/
-  int16_t width(void) const { return _width; };
-
-  /************************************************************************/
-  /*!
-    @brief      Get height of the display, accounting for current rotation
-    @returns    Height in pixels
-  */
-  /************************************************************************/
-  int16_t height(void) const { return _height; }
-
-  /************************************************************************/
-  /*!
-    @brief      Get rotation setting for display
-    @returns    0 thru 3 corresponding to 4 cardinal rotations
-  */
-  /************************************************************************/
-  uint8_t getRotation(void) const { return rotation; }
-
-  // get current cursor position (get rotation safe maximum values,
-  // using: width() for x, height() for y)
-  /************************************************************************/
-  /*!
-    @brief  Get text cursor X location
-    @returns    X coordinate in pixels
-  */
-  /************************************************************************/
-  int16_t getCursorX(void) const { return cursor_x; }
-
-  /************************************************************************/
-  /*!
-    @brief      Get text cursor Y location
-    @returns    Y coordinate in pixels
-  */
-  /************************************************************************/
-  int16_t getCursorY(void) const { return cursor_y; };
-
-protected:
-  void charBounds(unsigned char c, int16_t *x, int16_t *y, int16_t *minx,
-                  int16_t *miny, int16_t *maxx, int16_t *maxy);
-  int16_t WIDTH;        ///< This is the 'raw' display width - never changes
-  int16_t HEIGHT;       ///< This is the 'raw' display height - never changes
-  int16_t _width;       ///< Display width as modified by current rotation
-  int16_t _height;      ///< Display height as modified by current rotation
-  int16_t cursor_x;     ///< x location to start print()ing text
-  int16_t cursor_y;     ///< y location to start print()ing text
-  uint16_t textcolor;   ///< 16-bit background color for print()
-  uint16_t textbgcolor; ///< 16-bit text color for print()
-  uint8_t textsize_x;   ///< Desired magnification in X-axis of text to print()
-  uint8_t textsize_y;   ///< Desired magnification in Y-axis of text to print()
-  uint8_t rotation;     ///< Display rotation (0 thru 3)
-  bool wrap;            ///< If set, 'wrap' text at right edge of display
-  bool _cp437;          ///< If set, use correct CP437 charset (default is off)
-  GFXfont *gfxFont;     ///< Pointer to special font
-};
-
-/// A simple drawn button UI element
-class Adafruit_GFX_Button {
-
-public:
-  Adafruit_GFX_Button(void);
-  // "Classic" initButton() uses center & size
-  void initButton(Adafruit_GFX *gfx, int16_t x, int16_t y, uint16_t w,
-                  uint16_t h, uint16_t outline, uint16_t fill,
-                  uint16_t textcolor, char *label, uint8_t textsize);
-  void initButton(Adafruit_GFX *gfx, int16_t x, int16_t y, uint16_t w,
-                  uint16_t h, uint16_t outline, uint16_t fill,
-                  uint16_t textcolor, char *label, uint8_t textsize_x,
-                  uint8_t textsize_y);
-  // New/alt initButton() uses upper-left corner & size
-  void initButtonUL(Adafruit_GFX *gfx, int16_t x1, int16_t y1, uint16_t w,
-                    uint16_t h, uint16_t outline, uint16_t fill,
-                    uint16_t textcolor, char *label, uint8_t textsize);
-  void initButtonUL(Adafruit_GFX *gfx, int16_t x1, int16_t y1, uint16_t w,
-                    uint16_t h, uint16_t outline, uint16_t fill,
-                    uint16_t textcolor, char *label, uint8_t textsize_x,
-                    uint8_t textsize_y);
-  void drawButton(bool inverted = false);
-  bool contains(int16_t x, int16_t y);
-
-  /**********************************************************************/
-  /*!
-    @brief    Sets button state, should be done by some touch function
-    @param    p  True for pressed, false for not.
-  */
-  /**********************************************************************/
-  void press(bool p) {
-    laststate = currstate;
-    currstate = p;
-  }
-
-  bool justPressed();
-  bool justReleased();
-
-  /**********************************************************************/
-  /*!
-    @brief    Query whether the button is currently pressed
-    @returns  True if pressed
-  */
-  /**********************************************************************/
-  bool isPressed(void) { return currstate; };
-
-private:
-  Adafruit_GFX *_gfx;
-  int16_t _x1, _y1; // Coordinates of top-left corner
-  uint16_t _w, _h;
-  uint8_t _textsize_x;
-  uint8_t _textsize_y;
-  uint16_t _outlinecolor, _fillcolor, _textcolor;
-  char _label[10];
-
-  bool currstate, laststate;
-};
-
-/// A GFX 1-bit canvas context for graphics
-class GFXcanvas1 : public Adafruit_GFX {
-public:
-  GFXcanvas1(uint16_t w, uint16_t h);
-  ~GFXcanvas1(void);
-  void drawPixel(int16_t x, int16_t y, uint16_t color);
-  void fillScreen(uint16_t color);
-  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  bool getPixel(int16_t x, int16_t y) const;
-  /**********************************************************************/
-  /*!
-    @brief    Get a pointer to the internal buffer memory
-    @returns  A pointer to the allocated buffer
-  */
-  /**********************************************************************/
-  uint8_t *getBuffer(void) const { return buffer; }
-
-protected:
-  bool getRawPixel(int16_t x, int16_t y) const;
-  void drawFastRawVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  void drawFastRawHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  uint8_t *buffer; ///< Raster data: no longer private, allow subclass access
-
-private:
-#ifdef __AVR__
-  // Bitmask tables of 0x80>>X and ~(0x80>>X), because X>>Y is slow on AVR
-  static const uint8_t PROGMEM GFXsetBit[], GFXclrBit[];
-#endif
-};
-
-/// A GFX 8-bit canvas context for graphics
-class GFXcanvas8 : public Adafruit_GFX {
-public:
-  GFXcanvas8(uint16_t w, uint16_t h);
-  ~GFXcanvas8(void);
-  void drawPixel(int16_t x, int16_t y, uint16_t color);
-  void fillScreen(uint16_t color);
-  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  uint8_t getPixel(int16_t x, int16_t y) const;
-  /**********************************************************************/
-  /*!
-   @brief    Get a pointer to the internal buffer memory
-   @returns  A pointer to the allocated buffer
-  */
-  /**********************************************************************/
-  uint8_t *getBuffer(void) const { return buffer; }
-
-protected:
-  uint8_t getRawPixel(int16_t x, int16_t y) const;
-  void drawFastRawVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  void drawFastRawHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  uint8_t *buffer; ///< Raster data: no longer private, allow subclass access
-};
-
-///  A GFX 16-bit canvas context for graphics
-class GFXcanvas16 : public Adafruit_GFX {
-public:
-  GFXcanvas16(uint16_t w, uint16_t h);
-  ~GFXcanvas16(void);
-  void drawPixel(int16_t x, int16_t y, uint16_t color);
-  void fillScreen(uint16_t color);
-  void byteSwap(void);
-  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  uint16_t getPixel(int16_t x, int16_t y) const;
-  /**********************************************************************/
-  /*!
-    @brief    Get a pointer to the internal buffer memory
-    @returns  A pointer to the allocated buffer
-  */
-  /**********************************************************************/
-  uint16_t *getBuffer(void) const { return buffer; }
-
-protected:
-  uint16_t getRawPixel(int16_t x, int16_t y) const;
-  void drawFastRawVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  void drawFastRawHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
-  static uint16_t gfxBuffer[320 * 240];
-};
-
-#endif // _ADAFRUIT_GFX_H
